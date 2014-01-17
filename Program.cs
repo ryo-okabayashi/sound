@@ -28,7 +28,10 @@ namespace NAudioTest
 
 			Console.ReadKey();
 
+			waveFileWriter.Close();
 			waveOut.Stop();
+
+			waveFileWriter.Dispose();
 			waveOut.Dispose();
 		}
 	}
