@@ -28,11 +28,12 @@ namespace NAudioTest
 
 			Console.ReadKey();
 
-			waveFileWriter.Close();
 			waveOut.Stop();
-
-			waveFileWriter.Dispose();
 			waveOut.Dispose();
+
+			waveFileWriter.Close();
+			waveFileWriter.Dispose();
+
 		}
 	}
 
@@ -76,25 +77,85 @@ namespace NAudioTest
 		double L;
 		double R;
 		long count;
-		Random rnd = new Random();
+		Random random = new Random();
 
-		Sine s1 = new Sine(440);
-		Sine s2 = new Sine(890);
-		AR a1 = new AR(0, 1, 0.0001, 0, 0.01);
-		AR a2 = new AR(0, 1, 0.0001, 0, 0.01);
+		Pulse pulse1 = new Pulse(20);
+		AR pulse1Amp = new AR(0, 1, 0.01, 0, 0.09);
+
+		Triangle tri1 = new Triangle(14000);
+		AR tri1Amp = new AR(0, 1, 0.0001, 0, 0.004);
+
+		Sine kick = new Sine(0);
+		Line kickEnv = new Line(700, 50, 0.02);
+		AR kickAmp = new AR(0, 1, 0.01, 0, 0.1);
+
+		Noise snare = new Noise();
+		AR snareAmp = new AR(0, 1, 0.001, 0, 0.05);
+
+		int[] sawFreq = new int[16];
+		Saw saw1 = new Saw(0);
+		Saw saw2 = new Saw(0);
+		Saw saw3 = new Saw(0);
+		AR sawAmp = new AR(0, 1, 0.01, 0, 0.1);
+		int sawSeq = 0;
+		Delay sawDelay = new Delay(0.3, 0.5);
+
+		public MySound()
+		{
+			for (var i = 0; i < 16; i++)
+			{
+				sawFreq[i] = random.Next(12, 36);
+			}
+		}
 
 		public override int Read(float[] buffer, int offset, int sampleCount)
 		{
 			for (int n = 0; n < sampleCount;)
 			{
-				if (count % (int)(Program.SampleRate/16) == 0)
+				if (trigger(0.1))
 				{
-					a1.reset();
-					a2.reset();
-				}
-				L = s1.val() * a1.val() * 0.1f;
-				R = s2.val() * a2.val() * 0.1f;
+					if (random.Next(0, 10) == 0) { pulse1.freq(40); }
+					else { pulse1.freq(20); }
+					if (random.Next(0, 3) != 0) {
+						pulse1Amp.reset();
+					}
 
+					tri1Amp.reset();
+					
+					saw1.freq(sawFreq[sawSeq] * 100);
+					saw2.freq(sawFreq[sawSeq] * 100 + 10);
+					saw3.freq(sawFreq[sawSeq] * 100 + 20);
+					sawSeq++;
+					if (sawSeq >= 16) sawSeq = 0;
+					sawAmp.reset();
+				}
+				if (trigger(1.6*4))
+				{
+					for (var i = 0; i < 16; i++)
+					{
+						sawFreq[i] = random.Next(12, 36);
+					}
+				}
+
+				if (trigger(0.4))
+				{
+					kickAmp.reset();
+					kickEnv.reset();
+				}
+
+				if (trigger(0.8, 0.4))
+				{
+					snareAmp.reset();
+				}
+
+				L = pulse1.val() * pulse1Amp.val() * 0.15;
+				L += tri1.val() * tri1Amp.val() * 0.1;
+				L += kick.freq(kickEnv.val()).val() * kickAmp.val() * 0.3;
+				L += snare.val() * snareAmp.val() * 0.1;
+				L += sawDelay.io((saw1.val() + saw2.val() + saw3.val()) * sawAmp.val()) * 0.02;
+
+				R = L;
+	
 				buffer[n++ + offset] = (float)L;
 				buffer[n++ + offset] = (float)R;
 
@@ -104,6 +165,11 @@ namespace NAudioTest
 				count++;
 			}
 			return sampleCount;
+		}
+
+		bool trigger(double sec, double offset = 0)
+		{
+			return count % (int)(Program.SampleRate * sec) == (int)(Program.SampleRate * offset);
 		}
 	}
 
@@ -119,11 +185,6 @@ namespace NAudioTest
 
 		public double val()
 		{
-			//_value = (float)(Math.Sin(2 * Math.PI *_sample * _freq / Program.SampleRate));
-			//_sample++;
-			// if (_sample >= Program.SampleRate) _sample = 0;
-			//return _value;
-
 			_phase += _freq / Program.SampleRate;
 			return Math.Sin(2 * Math.PI * _phase);
 		}
@@ -133,6 +194,100 @@ namespace NAudioTest
 		{
 			_freq = f;
 			return this;
+		}
+	}
+
+	public class Triangle
+	{
+		double _freq;
+		int direction;
+		double _value;
+
+		public Triangle(double frequency)
+		{
+			_freq = frequency;
+			direction = 1;
+		}
+
+		public double val()
+		{
+			_value += (_freq / Program.SampleRate) * 4 * direction;
+			if (_value > 1)
+			{
+				_value = 2 - _value;
+				direction = -1;
+			}
+			if (_value < -1)
+			{
+				_value = -2 - _value;
+				direction = 1;
+			}
+
+			return _value;
+		}
+
+		public Triangle freq(double frequency)
+		{
+			_freq = frequency;
+			return this;
+		}
+	}
+
+	public class Pulse
+	{
+		int _range;
+		int _sample;
+		double _value;
+
+		public Pulse(double freq)
+		{
+			_range = (int)(Program.SampleRate / 2 / freq);
+			_value = 0.5;
+		}
+
+		public double val()
+		{
+			if (_sample % _range == 0) _value *= -1;
+			_sample++;
+			return _value;
+		}
+
+		public Pulse freq(double freq)
+		{
+			_range = (int)(Program.SampleRate / 2 / freq);
+			return this;
+		}
+	}
+
+	public class Saw
+	{
+		double _freq;
+		double _phase;
+		public Saw(double freqency)
+		{
+			_freq = freqency;
+		}
+
+		public double val()
+		{
+			_phase += _freq / Program.SampleRate;
+			_phase = (_phase > 1) ? -1 : _phase;
+			return _phase;
+		}
+
+		public Saw freq(double frequency)
+		{
+			_freq = frequency;
+			return this;
+		}
+	}
+
+	public class Noise
+	{
+		Random _random = new Random();
+		public double val()
+		{
+			return _random.NextDouble() * 2 - 1;
 		}
 	}
 
@@ -215,6 +370,43 @@ namespace NAudioTest
 		public bool done()
 		{
 			return r.done();
+		}
+	}
+
+	public class Delay
+	{
+		int inputIndex, m;
+		double delayTime, outputIndex, delta, feedback, output;
+		double[] buffer = new double[Program.SampleRate];
+
+		public Delay(double dt, double fb)
+		{
+			delayTime = dt;
+			feedback = fb;
+			inputIndex = 0;
+		}
+
+		public double io(double input)
+		{
+			if (inputIndex >= Program.SampleRate) inputIndex = 0;
+			outputIndex = inputIndex - (Program.SampleRate * delayTime);
+			if (outputIndex < 0) outputIndex = Program.SampleRate - 1 + outputIndex;
+
+			m = (int)outputIndex;
+			delta = outputIndex - (double)m;
+			output = delta * buffer[m + 1] + (1.0 - delta) * buffer[m];
+
+			buffer[inputIndex] = output * feedback + input;
+
+			inputIndex++;
+
+			return output;
+		}
+
+		public Delay setDelayTime(double dt)
+		{
+			delayTime = dt;
+			return this;
 		}
 	}
 }
