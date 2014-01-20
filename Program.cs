@@ -76,86 +76,18 @@ namespace NAudioTest
 	{
 		double L;
 		double R;
-		long count;
+		uint count;
 		Random random = new Random();
 
-		Pulse pulse1 = new Pulse(20);
-		AR pulse1Amp = new AR(0, 1, 0.01, 0, 0.09);
-
-		Triangle tri1 = new Triangle(14000);
-		AR tri1Amp = new AR(0, 1, 0.0001, 0, 0.004);
-
-		Sine kick = new Sine(0);
-		Line kickEnv = new Line(700, 50, 0.02);
-		AR kickAmp = new AR(0, 1, 0.01, 0, 0.1);
-
-		Noise snare = new Noise();
-		AR snareAmp = new AR(0, 1, 0.001, 0, 0.05);
-
-		int[] sawFreq = new int[16];
-		Saw saw1 = new Saw(0);
-		Saw saw2 = new Saw(0);
-		Saw saw3 = new Saw(0);
-		AR sawAmp = new AR(0, 1, 0.01, 0, 0.1);
-		int sawSeq = 0;
-		Delay sawDelay = new Delay(0.3, 0.5);
-
-		public MySound()
-		{
-			for (var i = 0; i < 16; i++)
-			{
-				sawFreq[i] = random.Next(12, 36);
-			}
-		}
+		public Sine sine1 = new Sine(440);
 
 		public override int Read(float[] buffer, int offset, int sampleCount)
 		{
 			for (int n = 0; n < sampleCount;)
 			{
-				if (trigger(0.1))
-				{
-					if (random.Next(0, 10) == 0) { pulse1.freq(40); }
-					else { pulse1.freq(20); }
-					if (random.Next(0, 3) != 0) {
-						pulse1Amp.reset();
-					}
 
-					tri1Amp.reset();
-					
-					saw1.freq(sawFreq[sawSeq] * 100);
-					saw2.freq(sawFreq[sawSeq] * 100 + 10);
-					saw3.freq(sawFreq[sawSeq] * 100 + 20);
-					sawSeq++;
-					if (sawSeq >= 16) sawSeq = 0;
-					sawAmp.reset();
-				}
-				if (trigger(1.6*4))
-				{
-					for (var i = 0; i < 16; i++)
-					{
-						sawFreq[i] = random.Next(12, 36);
-					}
-				}
+				L = R = sine1.val();
 
-				if (trigger(0.4))
-				{
-					kickAmp.reset();
-					kickEnv.reset();
-				}
-
-				if (trigger(0.8, 0.4))
-				{
-					snareAmp.reset();
-				}
-
-				L = pulse1.val() * pulse1Amp.val() * 0.15;
-				L += tri1.val() * tri1Amp.val() * 0.1;
-				L += kick.freq(kickEnv.val()).val() * kickAmp.val() * 0.3;
-				L += snare.val() * snareAmp.val() * 0.1;
-				L += sawDelay.io((saw1.val() + saw2.val() + saw3.val()) * sawAmp.val()) * 0.02;
-
-				R = L;
-	
 				buffer[n++ + offset] = (float)L;
 				buffer[n++ + offset] = (float)R;
 
